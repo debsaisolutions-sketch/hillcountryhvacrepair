@@ -1,0 +1,13 @@
+name: Homepage guard
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail on missing homepage assets, 555 numbers, or placeholder forms
+        run: python3 scripts/check-homepage.py
