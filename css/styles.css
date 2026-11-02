@@ -249,7 +249,7 @@ section h2 { font-size: clamp(1.7rem, 3vw, 2.3rem); color: var(--navy); }
 .site-footer {
   background: var(--navy);
   color: rgba(255,255,255,0.9);
-  padding: 36px 0 96px;
+  padding: 36px 0 88px;
 }
 .footer-grid {
   display: grid;
@@ -267,27 +267,9 @@ section h2 { font-size: clamp(1.7rem, 3vw, 2.3rem); color: var(--navy); }
   font-size: 0.92rem;
 }
 
-.mobile-call-bar {
-  display: none;
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 45;
-  background: var(--amber);
-  text-align: center;
-  font-weight: 800;
-}
-.mobile-call-bar a {
-  display: block;
-  color: #1c1403;
-  text-decoration: none;
-  padding: 14px 12px;
-}
-
 @media (max-width: 860px) {
   .trust-row, .services, .why-grid, .reviews, .lead-wrap, .footer-grid { grid-template-columns: 1fr; }
   .nav-links { gap: 10px 14px; }
-  .mobile-call-bar { display: block; }
   .hero { padding-top: 48px; }
+  .sticky-call { font-size: 0.92rem; }
 }
