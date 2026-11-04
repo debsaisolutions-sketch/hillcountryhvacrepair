@@ -9,14 +9,18 @@
 
 /**
  * Lead intake for Hill Country HVAC Repair → TradeDeskPro /api/leads.
- * Same fetch approach as houstontxhvacrepair.com /js/leads.js.
+ * Fetch shape follows houstontxhvacrepair.com /js/leads.js.
  * Profile: Deb / Debs AI Solutions (full UUID from the septic site form).
+ * No client secret is sent. Fast or honeypot submits are not posted.
  */
 (function () {
   var API_URL = "https://www.tradedeskpro.com/api/leads";
   var PROFILE_ID = "63e7470e-fe1e-4367-aae0-56d0d6392d78";
   var SOURCE = "hillcountryhvacrepair.com";
   var PHONE_DISPLAY = "+1 (830) 307-7334";
+  var MIN_MS = 3000;
+  var UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
+  var loadedAt = Date.now();
 
   function field(form, name) {
     return form.querySelector('[name="' + name + '"]');
@@ -34,33 +38,106 @@
     el.style.display = "none";
   }
 
-  async function submitLead(payload) {
-    var service = payload.service || "";
-    var note = payload.message || "";
-    var message = [service ? "Service: " + service : "", note].filter(Boolean).join("\n");
+  function pageLocation() {
+    try {
+      return window.location.href || "";
+    } catch (e) {
+      return "";
+    }
+  }
 
+  function pageSearch() {
+    try {
+      return window.location.search || "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function provenance() {
+    var helper = {};
+    try {
+      if (typeof window.tdpLeadAttribution === "function") {
+        helper = window.tdpLeadAttribution() || {};
+      }
+    } catch (e) {
+      helper = {};
+    }
+
+    var params;
+    try {
+      params = new URLSearchParams(pageSearch());
+    } catch (e2) {
+      params = { get: function () { return ""; } };
+    }
+
+    var extra = {
+      landing_url: helper.landing_url || pageLocation(),
+    };
+    if (helper.first_touch_url) extra.first_touch_url = helper.first_touch_url;
+    if (helper.referrer) extra.referrer = helper.referrer;
+
+    for (var i = 0; i < UTM_KEYS.length; i++) {
+      var key = UTM_KEYS[i];
+      var value = helper[key] || (params.get ? params.get(key) : "") || "";
+      if (value) extra[key] = value;
+    }
+    return extra;
+  }
+
+  function buildMessage(payload) {
+    var lines = [];
+    if (payload.service) lines.push("Service: " + payload.service);
+    if (payload.area) lines.push("Area: " + payload.area);
+    if (payload.message) lines.push(payload.message);
+    return lines.join("\n");
+  }
+
+  function leadBody(payload) {
     var body = {
       name: payload.name,
+      profile_id: PROFILE_ID,
       phone: payload.phone || "",
       email: payload.email || "",
-      service: service,
-      message: message,
+      message: buildMessage(payload),
       source: SOURCE,
-      profile_id: PROFILE_ID,
     };
+    var extra = provenance();
+    var key;
+    for (key in extra) {
+      if (Object.prototype.hasOwnProperty.call(extra, key) && extra[key]) {
+        body[key] = extra[key];
+      }
+    }
+    return body;
+  }
 
+  function errorMessage(status) {
+    if (status === 429) {
+      return "We're getting a lot of requests right now. Please call " + PHONE_DISPLAY + " and we'll help right away.";
+    }
+    if (status === 403) {
+      return "We couldn't send that from this page. Please call " + PHONE_DISPLAY + " and we'll help right away.";
+    }
+    return "We couldn't confirm the send. Please call " + PHONE_DISPLAY + " and we'll help right away.";
+  }
+
+  async function submitLead(payload) {
     var res = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(leadBody(payload)),
     });
-    if (!res.ok) {
-      var errText = await res.text().catch(function () {
-        return "";
-      });
-      throw new Error(errText || "Lead submit failed");
+    if (res.status === 201 || res.status === 202 || (res.ok && res.status >= 200 && res.status < 300)) {
+      return { ok: true, status: res.status };
     }
-    return res.json();
+    return { ok: false, status: res.status };
+  }
+
+  function fakeSuccess(form, success, error) {
+    hide(error);
+    show(success, "Request received. We'll call you back during business hours.");
+    if (form.reset) form.reset();
   }
 
   function wireForm(form) {
@@ -79,9 +156,26 @@
       hide(error);
 
       var honeypot = field(form, "company_website");
-      if (honeypot && honeypot.value.trim()) {
-        show(success, "Request received. We'll call you back during business hours.");
-        form.reset();
+      if (honeypot && String(honeypot.value || "").trim()) {
+        fakeSuccess(form, success, error);
+        return;
+      }
+
+      if (Date.now() - loadedAt < MIN_MS) {
+        fakeSuccess(form, success, error);
+        return;
+      }
+
+      var nameEl = field(form, "name");
+      var emailEl = field(form, "email");
+      var phoneEl = field(form, "phone");
+      var serviceEl = field(form, "service");
+      var areaEl = field(form, "area");
+      var messageEl = field(form, "message");
+      var phone = phoneEl ? String(phoneEl.value || "").trim() : "";
+
+      if (!phone) {
+        show(error, "Add a phone number, or call " + PHONE_DISPLAY + ".");
         return;
       }
 
@@ -90,24 +184,23 @@
         btn.textContent = "Sending...";
       }
 
-      var nameEl = field(form, "name");
-      var emailEl = field(form, "email");
-      var phoneEl = field(form, "phone");
-      var serviceEl = field(form, "service");
-      var messageEl = field(form, "message");
-
       try {
-        await submitLead({
-          name: nameEl ? nameEl.value.trim() : "",
-          email: emailEl ? emailEl.value.trim() : "",
-          phone: phoneEl ? phoneEl.value.trim() : "",
-          service: serviceEl ? serviceEl.value.trim() : "",
-          message: messageEl ? messageEl.value.trim() : "",
+        var result = await submitLead({
+          name: nameEl ? String(nameEl.value || "").trim() : "",
+          email: emailEl ? String(emailEl.value || "").trim() : "",
+          phone: phone,
+          service: serviceEl ? String(serviceEl.value || "").trim() : "",
+          area: areaEl ? String(areaEl.value || "").trim() : "",
+          message: messageEl ? String(messageEl.value || "").trim() : "",
         });
-        show(success, "Request received. We'll be in touch soon. For an urgent no-cool or no-heat call, phone " + PHONE_DISPLAY + ".");
-        form.reset();
+        if (result.ok) {
+          show(success, "Request received. We'll be in touch soon. For an urgent no-cool or no-heat call, phone " + PHONE_DISPLAY + ".");
+          if (form.reset) form.reset();
+        } else {
+          show(error, errorMessage(result.status));
+        }
       } catch (err) {
-        show(error, "We couldn't confirm the send. Please call " + PHONE_DISPLAY + " and we'll help right away.");
+        show(error, errorMessage(0));
       }
 
       if (btn) {
@@ -121,7 +214,12 @@
     document.querySelectorAll("form.lead-form").forEach(wireForm);
   }
 
-  window.HillCountryLeads = { submitLead: submitLead, wireForm: wireForm };
+  window.HillCountryLeads = {
+    submitLead: submitLead,
+    wireForm: wireForm,
+    leadBody: leadBody,
+    loadedAt: function () { return loadedAt; },
+  };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

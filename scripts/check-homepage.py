@@ -14,14 +14,12 @@ ROOT = Path(__file__).resolve().parents[1]
 INDEX = ROOT / "index.html"
 
 PHONE_555 = re.compile(
-    r"(?:\(\s*555\s*\)|\b555\s*[-\.]\s*\d{3,4}\b|\b\d{3}\s*[-\.\)]\s*555\s*[-\.]\s*\d{4}\b)",
+    r"(?:\(\s*555\s*\)|555\s*-\s*0|\b555\s*[-\.]\s*\d{3,4}\b|\b\d{3}\s*[-\.\)]\s*555\s*[-\.]\s*\d{4}\b)",
     re.IGNORECASE,
 )
-PLACEHOLDERS = (
+PLACEHOLDER_TOKENS = (
     "YOUR_FORM_ID",
     "REPLACE_WITH",
-    "formspree.io/f/YOUR",
-    "REPLACE_WITH_FORMSPREE_ID",
 )
 MANUS_MARKERS = ("manus-runtime", "spaceEditor", "/assets/index-")
 
@@ -96,7 +94,10 @@ def check_text(label: str, text: str) -> list[str]:
     problems = []
     if PHONE_555.search(text):
         problems.append(f"{label} contains a 555 phone number")
-    for token in PLACEHOLDERS:
+    lowered = text.lower()
+    if "formspree" in lowered:
+        problems.append(f"{label} contains a formspree form endpoint")
+    for token in PLACEHOLDER_TOKENS:
         if token in text:
             problems.append(f"{label} contains placeholder form endpoint {token}")
     return problems
